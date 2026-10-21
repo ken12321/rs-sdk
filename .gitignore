@@ -15,6 +15,7 @@ backups/
 # Bot folders (except template)
 bots/*/
 !bots/_template/
+!bots/_shared/
 
 # Daemon type checker temp file
 sdk/__exec_check.ts

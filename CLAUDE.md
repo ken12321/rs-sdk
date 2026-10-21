@@ -97,6 +97,21 @@ what's going on, don't just assume the game is broken because you got confused, 
 
 After filing the bug, keep working on your goal!
 
+## Shared Scripts (use these first)
+
+`bots/_shared/` is the committed library of proven scripts that any bot can run.
+`bots/_shared/README.md` lists each one with its status and evidence. Before
+writing a new script, check whether one already exists there. Run one on any bot
+with:
+
+```bash
+bun bots/_shared/run.ts {username} woodcut willow 15   # starts the lite client if needed
+```
+
+When a script in `bots/{username}/` proves itself in a logged run, promote it
+into `bots/_shared/`: take the bot name as the first argument, read the rest via
+`scriptArgs()` from `lib.ts`, and add a row with evidence to the README catalog.
+
 ## Session Workflow
 
 This is a **persistent character** - you don't restart fresh each time. The workflow is:
