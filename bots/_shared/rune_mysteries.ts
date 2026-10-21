@@ -1,7 +1,8 @@
 import { runScript } from '../../sdk/runner';
-import { LUMBRIDGE_TO_VARROCK, VARROCK_TO_LUMBRIDGE, climb, converse, fmt, has, pos, walkRoute } from './lib';
+import { LUMBRIDGE_TO_VARROCK, LUMBRIDGE_TO_WIZARD_TOWER, VARROCK_TO_LUMBRIDGE, avoidFights, climb, converse, fmt, has, pos, walkRoute, scriptArgs } from './lib';
 
-// UNPROVEN: the only run so far stopped in stage 1 (Duke Horacio).
+// PARTLY PROVEN: stages 1-2 work and the walk back reaches Lumbridge north;
+// stages 3-4 haven't been seen to finish (the bot died on the way, see B8).
 // Usage: bun bots/_shared/rune_mysteries.ts <botname>
 // Rune Mysteries, start to finish (unlocks Aubury's essence-mine teleport).
 // Dialogue picks come straight from the server scripts:
@@ -11,9 +12,12 @@ import { LUMBRIDGE_TO_VARROCK, VARROCK_TO_LUMBRIDGE, climb, converse, fmt, has, 
 // Resumable: the stage is worked out from what's in the inventory.
 const LUMBRIDGE_STAIRS = { x: 3206, z: 3210 };   // SW tower staircase, ground floor
 const DUKE = { x: 3212, z: 3220 };               // first floor
-const WIZARD_TOWER = { x: 3109, z: 3166 };       // ground floor, ladder to basement inside
 const AUBURY = { x: 3253, z: 3402 };             // rune shop, east Varrock
+const SEDRIDOR = { x: 3103, z: 9571 };           // Wizards' Tower basement, past a door
 
+// Pass `lost` after a death that lost the package (quest items aren't in the bank):
+// the stage can't be read from an empty inventory, and Sedridor re-issues it.
+const LOST = scriptArgs()[0] === 'lost';
 const TALISMAN = /^air talisman$/i, PACKAGE = /^research package$/i, NOTES = /^research notes$/i;
 
 await runScript(async (ctx) => {
@@ -23,22 +27,47 @@ await runScript(async (ctx) => {
 
     async function toSedridor(from: 'lumbridge' | 'varrock') {
         if (from === 'varrock') await walkRoute(ctx, VARROCK_TO_LUMBRIDGE);
-        const r = await bot.walkTo(WIZARD_TOWER.x, WIZARD_TOWER.z, 3, { timeout: 120_000 });
-        if (!r.success) throw new Error(`Walk to Wizards' Tower: ${r.message}`);
+        // Start from Lumbridge north-west unless we're already well along the road west;
+        // cutting across from elsewhere goes through the goblin/spider woods.
+        const x = pos(ctx).x;
+        await walkRoute(ctx, x < 3140 ? LUMBRIDGE_TO_WIZARD_TOWER.filter(w => w.x < x - 5) : LUMBRIDGE_TO_WIZARD_TOWER);
         await climb(ctx, 'down');
+    }
+    async function talkSedridor(wanted: RegExp[], done: () => boolean) {
+        // NPC list can lag a climb, and he's behind a door: walk over first.
+        await bot.walkTo(SEDRIDOR.x, SEDRIDOR.z, 2);
+        await ctx.sdk.waitForTicks(2);
+        // Quest state persists between talks, so a cut-short chat just resumes.
+        for (let i = 0; i < 3 && !done(); i++) await converse(ctx, /head wizard|sedridor/i, wanted);
     }
     async function toAubury() {
         if (inBasement()) await climb(ctx, 'up');
-        await bot.walkTo(3222, 3260, 4, { timeout: 120_000 }); // back to Lumbridge north
+        // walkTo's pathfinder thinks the open tower doors are walls (B7); the server's
+        // own walk routes through them fine.
+        if (pos(ctx).z < 3170 && pos(ctx).x < 3115) {
+            await ctx.sdk.sendWalk(3109, 3170, true);
+            await ctx.sdk.waitForCondition(() => pos(ctx).z >= 3169, 20_000).catch(() => {});
+            console.log(`Left the tower -> ${fmt(ctx)}`);
+        }
+        await walkRoute(ctx, [...LUMBRIDGE_TO_WIZARD_TOWER].reverse().slice(1)); // back east to Lumbridge
         await walkRoute(ctx, LUMBRIDGE_TO_VARROCK);
         const r = await bot.walkTo(AUBURY.x, AUBURY.z, 3, { timeout: 90_000 });
         if (!r.success) throw new Error(`Walk to Aubury: ${r.message}`);
     }
 
     console.log(`Start ${fmt(ctx)}`);
+    await avoidFights(ctx);
+
+    // 2b. Package lost after handing over the talisman: Sedridor gives another, no choices.
+    if (LOST && !has(ctx, TALISMAN) && !has(ctx, PACKAGE) && !has(ctx, NOTES)) {
+        console.log('== Stage 2b: Sedridor (replacement package)');
+        if (!inBasement()) await toSedridor(pos(ctx).z > 3350 ? 'varrock' : 'lumbridge');
+        await talkSedridor([], () => has(ctx, PACKAGE));
+        if (!has(ctx, PACKAGE)) throw new Error('Sedridor did not re-issue the package');
+    }
 
     // 1. Duke Horacio -> air talisman
-    if (!has(ctx, TALISMAN) && !has(ctx, PACKAGE) && !has(ctx, NOTES)) {
+    if (!LOST && !has(ctx, TALISMAN) && !has(ctx, PACKAGE) && !has(ctx, NOTES)) {
         console.log('== Stage 1: Duke Horacio');
         await bot.walkTo(LUMBRIDGE_STAIRS.x, LUMBRIDGE_STAIRS.z, 3);
         await climb(ctx, 'up');
@@ -53,7 +82,7 @@ await runScript(async (ctx) => {
     if (has(ctx, TALISMAN) && !has(ctx, PACKAGE) && !has(ctx, NOTES)) {
         console.log('== Stage 2: Sedridor (talisman)');
         if (!inBasement()) await toSedridor(pos(ctx).z > 3350 ? 'varrock' : 'lumbridge');
-        await converse(ctx, /head wizard|sedridor/i, [/looking for the head wizard/i, /ok, here you are/i, /yes, certainly/i]);
+        await talkSedridor([/looking for the head wizard/i, /ok, here you are/i, /yes, certainly/i], () => has(ctx, PACKAGE));
         if (!has(ctx, PACKAGE)) throw new Error('No research package from Sedridor');
     }
 
@@ -61,8 +90,7 @@ await runScript(async (ctx) => {
     if (has(ctx, PACKAGE)) {
         console.log('== Stage 3: Aubury');
         await toAubury();
-        await converse(ctx, /^aubury$/i, [/package for you/i]);
-        if (!has(ctx, NOTES)) await converse(ctx, /^aubury$/i, [/package for you/i]);
+        for (let i = 0; i < 4 && !has(ctx, NOTES); i++) await converse(ctx, /^aubury$/i, [/package for you/i]);
         if (!has(ctx, NOTES)) throw new Error('No research notes from Aubury');
     }
 
@@ -70,7 +98,7 @@ await runScript(async (ctx) => {
     if (has(ctx, NOTES)) {
         console.log('== Stage 4: Sedridor (notes)');
         if (!inBasement()) await toSedridor(pos(ctx).z > 3350 ? 'varrock' : 'lumbridge');
-        await converse(ctx, /head wizard|sedridor/i, []);
+        await talkSedridor([], () => !has(ctx, NOTES));
         if (has(ctx, NOTES)) throw new Error('Sedridor did not take the notes');
         console.log(`Quest complete! Air talisman: ${has(ctx, TALISMAN)}`);
     }

@@ -32,10 +32,15 @@ bun bots/_shared/woodcut.ts mybot willow 15
 | `walk_to_ge` | ✅ proven | – | – | iamnotabot, Lumbridge → GE west of the Dark wizard circle |
 | `ge_sell_runes` | ✅ proven | – | at GE, starter air runes | iamnotabot, raised ≥200 gp for the axe |
 | `buy_axe` | ✅ proven | – | ≥200 coins, at GE | iamnotabot, banked junk at Varrock West, bought a steel axe from Bob |
-| `rune_mysteries` | ⚠️ partly proven | – | – | iamnotabot: stage 1 (Duke Horacio) and the stage 2 talisman handover worked; stages 3–4 not yet seen to finish |
+| `rune_mysteries` | ⚠️ partly proven | – | food; combat 6 died on the way (B8) | iamnotabot: stage 1 (Duke) and stage 2 (Sedridor → research package) worked; left the tower and walked back to Lumbridge north, then died. Stages 3–4 not yet seen to finish. Resumable from inventory |
 
 `lib.ts` holds the shared helpers: `walkRoute`, the safe `LUMBRIDGE_TO_VARROCK`
-route, `climb`, `converse`, `eatIfLow` and `scriptArgs`.
+and `LUMBRIDGE_TO_WIZARD_TOWER` routes, `climb`, `converse` (waits for each
+dialogue page to change; see B6), `eatIfLow` and `scriptArgs`.
+
+In development in `bots/iamnotabot/` (not yet run): `mine_essence` (Aubury
+teleport → essence → Varrock East bank) and `craft_air` (Falador East bank →
+air altar), the air-rune money loop that follows Rune Mysteries.
 
 ## Fresh-bot recipe
 

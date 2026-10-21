@@ -11,6 +11,17 @@ export const LUMBRIDGE_TO_VARROCK: Waypoint[] = [
 ];
 export const VARROCK_TO_LUMBRIDGE: Waypoint[] = [...LUMBRIDGE_TO_VARROCK].reverse();
 
+// Lumbridge -> Wizards' Tower along the Draynor road, walked both ways by iamnotabot.
+// Avoids the woods west of the castle, where aggressive goblins/spiders killed it.
+// Leaving the tower, walkTo can't path through its open doors: see B7 in learnings/problems.md.
+export const LUMBRIDGE_TO_WIZARD_TOWER: Waypoint[] = [
+    { x: 3215, z: 3250, name: 'Lumbridge north-west' },
+    { x: 3135, z: 3250, name: 'road to Draynor' },
+    { x: 3105, z: 3245, name: 'Draynor' },
+    { x: 3108, z: 3195, name: 'south of Draynor' },
+    { x: 3109, z: 3166, name: "Wizards' Tower" },
+];
+
 /**
  * Script arguments after the bot name. Shared scripts are invoked as
  * `bun bots/_shared/<script>.ts <botname> [args...]`; sdk/runner.ts reads
@@ -29,13 +40,28 @@ export const count = ({ sdk }: Ctx, re: RegExp): number =>
 
 export async function eatIfLow(ctx: Ctx, at = 5) {
     if (ctx.sdk.getSkill('hitpoints')!.level <= at && ctx.sdk.findInventoryItem(/^(shrimps|bread)$/i)) {
-        const r = await ctx.bot.eatFood();
+        const r = await ctx.bot.eatFood(/^(shrimps|bread)$/i);
         console.log(`HP low, ate: ${r.message}`);
     }
 }
 
+/**
+ * Never fight back: turn auto-retaliate off so attackers can't pin us in place,
+ * and we just keep walking out of their range. (controls:com_3, interface.pack 151;
+ * see interface_controls/scripts/player_controls.rs2.)
+ */
+const AUTO_RETALIATE_OFF = 151;
+export async function avoidFights(ctx: Ctx) {
+    const { sdk } = ctx;
+    if (sdk.getState()!.autoRetaliateEnabled === false) return;
+    await sdk.sendClickComponent(AUTO_RETALIATE_OFF);
+    const ok = await sdk.waitForCondition((s: any) => s.autoRetaliateEnabled === false, 5_000).then(() => true, () => false);
+    console.log(ok ? 'Auto-retaliate off' : `Auto-retaliate still ${sdk.getState()!.autoRetaliateEnabled}`);
+}
+
 /** Walk a list of waypoints, retrying each leg once with a looser tolerance. */
 export async function walkRoute(ctx: Ctx, route: Waypoint[]) {
+    await avoidFights(ctx);
     for (const w of route) {
         await eatIfLow(ctx);
         let r = await ctx.bot.walkTo(w.x, w.z, 4, { timeout: 90_000 });
@@ -69,14 +95,16 @@ export async function converse(ctx: Ctx, npc: RegExp, wanted: RegExp[]) {
     const { bot, sdk } = ctx;
     const t = await bot.talkTo(npc);
     if (!t.success) throw new Error(`talkTo ${npc}: ${t.message}`);
-    for (let step = 0; step < 60; step++) {
+    for (let step = 0; step < 80; step++) {
         const d = sdk.getDialog();
-        if (!d?.isOpen) {
-            // Allow a beat for the next page to appear before deciding we're done.
-            await sdk.waitForTicks(2);
-            if (!sdk.getDialog()?.isOpen) return;
+        if (!d?.isOpen || d.isWaiting) {
+            // Give the next page time to arrive before deciding we're done.
+            const reopened = await sdk.waitForCondition((s: any) => s.dialog?.isOpen && !s.dialog.isWaiting, 5_000)
+                .then(() => true, () => false);
+            if (!reopened) return;
             continue;
         }
+        const page = d.pageId;
         const choices = d.options.filter((o: any) => !/continue/i.test(o.text));
         if (choices.length > 1) {
             const pick = choices.find((o: any) => wanted.some(w => w.test(o.text)));
@@ -86,11 +114,13 @@ export async function converse(ctx: Ctx, npc: RegExp, wanted: RegExp[]) {
                 return;
             }
             console.log(`  > ${pick.text}`);
-            await sdk.clickDialogByText(new RegExp(`^${pick.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+            const r = await sdk.clickDialogByText(new RegExp(`^${pick.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+            if (!r.success) console.log(`  click failed: ${r.message}`);
         } else {
             await sdk.sendClickDialog(d.options[0]?.index ?? 0);
         }
-        await sdk.waitForTicks(1);
+        // Wait for this page to go away so we never click the same page twice.
+        await sdk.waitForCondition((s: any) => !s.dialog?.isOpen || s.dialog.pageId !== page, 5_000).catch(() => {});
     }
-    console.log('converse: gave up after 60 steps');
+    console.log('converse: gave up after 80 steps');
 }
