@@ -28,11 +28,11 @@ bun bots/_shared/woodcut.ts mybot willow 15
 | Script | Status | Usage (after `<botname>`) | Needs | Evidence |
 | --- | --- | --- | --- | --- |
 | `woodcut` | ✅ proven | `[tree\|oak\|willow] [minutes] [x z]` | any axe | iamnotabot, willow at (3233,3244), 15 min: 54 logs, WC 41→68, ~424k xp/hr |
-| `fish` | ✅ proven | `[minutes]` | small fishing net (starter kit has one) | iamnotabot2, fresh bot, Draynor net 60 s: 4 shrimp and +1 level. ⚠️ The buy-a-net fallback (Gerrant, Port Sarim) is unproven: it failed with "Shopkeeper not found" on a bot with no net and no coins |
+| `fish` | ✅ proven | `[minutes]` | small fishing net (starter kit has one) | iamnotabot2, fresh bot, Draynor net 60 s: 4 shrimp and +1 level. ⚠️ The buy-a-net fallback (Gerrant, Port Sarim) is unproven: see B2 in `learnings/problems.md` |
 | `walk_to_ge` | ✅ proven | – | – | iamnotabot, Lumbridge → GE west of the Dark wizard circle |
 | `ge_sell_runes` | ✅ proven | – | at GE, starter air runes | iamnotabot, raised ≥200 gp for the axe |
 | `buy_axe` | ✅ proven | – | ≥200 coins, at GE | iamnotabot, banked junk at Varrock West, bought a steel axe from Bob |
-| `rune_mysteries` | ⚠️ unproven | – | – | iamnotabot run stopped in stage 1 (Duke Horacio); fix and re-run before trusting |
+| `rune_mysteries` | ⚠️ partly proven | – | – | iamnotabot: stage 1 (Duke Horacio) and the stage 2 talisman handover worked; stages 3–4 not yet seen to finish |
 
 `lib.ts` holds the shared helpers: `walkRoute`, the safe `LUMBRIDGE_TO_VARROCK`
 route, `climb`, `converse`, `eatIfLow` and `scriptArgs`.

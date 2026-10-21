@@ -112,6 +112,15 @@ When a script in `bots/{username}/` proves itself in a logged run, promote it
 into `bots/_shared/`: take the bot name as the first argument, read the rest via
 `scriptArgs()` from `lib.ts`, and add a row with evidence to the README catalog.
 
+## Problems Log (record every problem)
+
+Add an entry to `learnings/problems.md` for every problem you run into: SDK or
+tooling bugs, script failures, lag (with numbers like `sdk.getStateAge()` and
+ticks vs wall time), and anything where the wiki disagrees with the live game.
+Log it even when you found a workaround, and update the entry's status rather
+than deleting it. Read that file before debugging; the problem may already be
+known.
+
 ## Session Workflow
 
 This is a **persistent character** - you don't restart fresh each time. The workflow is:
